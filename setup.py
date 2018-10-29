@@ -13,7 +13,7 @@ setup(
     author_email='dbyzaa@163.com',
     scripts=['pgbouncerd'],
     url='https://github.com/NemoAA/pg_script/tree/master/pgbouncerd',
-    license='LICENSE.txt',
+    license='LICENSE',
     description='Command line tool for PgBouncer server daemon.',
     install_requires=[
         "psutil >= 0.4.1",
