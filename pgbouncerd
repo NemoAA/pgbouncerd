@@ -81,16 +81,16 @@ class PgBouncerDaemon(object):
 
         sys.stdout.flush()
         sys.stderr.flush()
-        # 重定向文件描述符
-        si = file(self.stdin, 'r')
-        so = file(self.stdout, 'a+')
-        se = file(self.stderr, 'a+', 0)
-        os.dup2(si.fileno(), sys.stdin.fileno())
-        os.dup2(so.fileno(), sys.stdout.fileno())
-        os.dup2(se.fileno(), sys.stderr.fileno())
+        # # 重定向文件描述符
+        # si = file(self.stdin, 'r')
+        # so = file(self.stdout, 'a+')
+        # se = file(self.stderr, 'a+', 0)
+        # os.dup2(si.fileno(), sys.stdin.fileno())
+        # os.dup2(so.fileno(), sys.stdout.fileno())
+        # os.dup2(se.fileno(), sys.stderr.fileno())
 
         # 创建 daemon pid 文件
-        atexit.register(self.exit)
+        atexit.register(self.del_pid_file)
         pid = str(os.getpid())
         file(self.daemon_pidfile, 'w').write('%s\n' % pid)
 
@@ -113,16 +113,11 @@ class PgBouncerDaemon(object):
                 self.logger.info('[%s] is not runing' % _pid)
                 return None
         else:
-            self.logger.info('PID file is not exists')
             return None
 
-    def exit(self):
-        """
-        Cleanup pid file at exit.
-        """
-        self.logger.warn("Stopping daemon.")
-        os.remove(str(self.daemon_pid))
-        sys.exit(0)
+    def del_pid_file(self):
+        if self.daemon_pid:
+            os.remove(str(self.daemon_pid))
 
     def _run(self):
         self.pgbouncer_process = subprocess.Popen(["pgbouncer", self.config_path], shell=False,
@@ -132,11 +127,11 @@ class PgBouncerDaemon(object):
                                                   )
         self.pgbouncer_pid = self.pgbouncer_process.pid
         if psutil.pid_exists(self.pgbouncer_process.pid) is True:
-            self.logger.info('waiting for PgBouncer to start....')
+            self.logger.info('PgBouncer started')
         else:
             self.logger.error('start failed')
 
-    def poll(self, pgbouncer_pid):
+    def _poll(self, pgbouncer_pid):
         setproctitle.setproctitle("pgbouncerd")
         self.pgbouncer_pid = pgbouncer_pid
         print self.pgbouncer_pid
@@ -150,7 +145,6 @@ class PgBouncerDaemon(object):
                 else:
                     self._daemonize()
                     self._run()
-                    self.logger.info('PgBouncer started')
             except OSError, e:
                 logging.error('[%s] PgBouncer start failed check file: %s \r\n' % (e, self.stderr))
                 if self.pgbouncer_pid:
@@ -164,17 +158,19 @@ class PgBouncerDaemon(object):
         daemon_pid = self.check_activity_pid(self.daemon_pidfile)
 
         if pgbouncer_pid and daemon_pid:
-            self.logger.info('Daemon and PgBouncer is runing')
+            self.logger.info('Daemon and PgBouncer is already runing')
             sys.exit(0)
         elif daemon_pid is None and pgbouncer_pid is not None:
             self.logger.warn('Daemon is not runing and start Daemon')
             self._daemonize()
-            self.poll(pgbouncer_pid)
+            self._poll(pgbouncer_pid)
+            logging.info('Daemon started')
             sys.exit(0)
         else:
             self.logger.warn('Daemon and PgBouncer is not runing')
+            self._poll(pgbouncer_pid)
             self._daemonize()
-            self.poll(pgbouncer_pid)
+            logging.info('Daemon and PgBouncer are started')
             sys.exit(0)
 
     def stop(self):
@@ -236,7 +232,6 @@ def main():
     a = PgBouncerDaemon(options.config_path)
     if command_line == 'start':
         a.start()
-        logging.info('PgBouncer started')
     elif command_line == 'stop':
         a.stop()
         logging.info('PgBouncer stoped')
